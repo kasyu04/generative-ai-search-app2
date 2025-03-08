@@ -17,8 +17,7 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 import constants as ct
-
-
+from langchain_community.document_loaders.csv_loader import CSVLoader
 ############################################################
 # 設定関連
 ############################################################
@@ -107,26 +106,29 @@ def initialize_retriever():
         return
     
     # RAGの参照先となるデータソースの読み込み
-    docs_all = load_data_sources()
+    docs_all, integrated_docs_all = load_data_sources()
     
     # 埋め込みモデルの用意
     embeddings = OpenAIEmbeddings()
     
     # チャンク分割用のオブジェクトを作成
     text_splitter = CharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=50,
+        chunk_size=ct.CHUNK_SIZE,
+        chunk_overlap=ct.CHUNK_OVERLAP,
         separator="\n"
     )
 
     # チャンク分割を実施
     splitted_docs = text_splitter.split_documents(docs_all)
 
+    # チャンク分割後のデータソースに、CSVファイルの各行データを1つのドキュメントに統合したデータを追加
+    splitted_docs.extend(integrated_docs_all)
+
     # ベクターストアの作成
     db = Chroma.from_documents(splitted_docs, embedding=embeddings)
 
     # ベクターストアを検索するRetrieverの作成
-    st.session_state.retriever = db.as_retriever(search_kwargs={"k": 3})
+    st.session_state.retriever = db.as_retriever(search_kwargs={"k": ct.TOP_K})
 
 
 def initialize_session_state():
@@ -145,12 +147,15 @@ def load_data_sources():
     RAGの参照先となるデータソースの読み込み
 
     Returns:
-        読み込んだ通常データソース
+        docs_all: 読み込んだ通常データソース
+        integrated_docs_all: CSVファイル整形後のデータソース
     """
     # データソースを格納する用のリスト
     docs_all = []
+    # CSVファイル整形後のデータソースを格納する用のリスト
+    integrated_docs_all = []
     # ファイル読み込みの実行（渡した各リストにデータが格納される）
-    recursive_file_check(ct.RAG_TOP_FOLDER_PATH, docs_all)
+    recursive_file_check(ct.RAG_TOP_FOLDER_PATH, docs_all, integrated_docs_all)
 
     web_docs_all = []
     # ファイルとは別に、指定のWebページ内のデータも読み込み
@@ -164,16 +169,17 @@ def load_data_sources():
     # 通常読み込みのデータソースにWebページのデータを追加
     docs_all.extend(web_docs_all)
 
-    return docs_all
+    return docs_all, integrated_docs_all
 
 
-def recursive_file_check(path, docs_all):
+def recursive_file_check(path, docs_all, integrated_docs_all):
     """
     RAGの参照先となるデータソースの読み込み
 
     Args:
         path: 読み込み対象のファイル/フォルダのパス
         docs_all: データソースを格納する用のリスト
+        integrated_docs_all: CSVファイル整形後のデータソースを格納する用のリスト
     """
     # パスがフォルダかどうかを確認
     if os.path.isdir(path):
@@ -184,19 +190,20 @@ def recursive_file_check(path, docs_all):
             # ファイル/フォルダ名だけでなく、フルパスを取得
             full_path = os.path.join(path, file)
             # フルパスを渡し、再帰的にファイル読み込みの関数を実行
-            recursive_file_check(full_path, docs_all)
+            recursive_file_check(full_path, docs_all, integrated_docs_all)
     else:
         # パスがファイルの場合、ファイル読み込み
-        file_load(path, docs_all)
+        file_load(path, docs_all, integrated_docs_all)
 
 
-def file_load(path, docs_all):
+def file_load(path, docs_all, integrated_docs_all):
     """
     ファイル内のデータ読み込み
 
     Args:
         path: ファイルパス
         docs_all: データソースを格納する用のリスト
+        integrated_docs_all: CSVファイル整形後のデータソースを格納する用のリスト
     """
     # ファイルの拡張子を取得
     file_extension = os.path.splitext(path)[1]
@@ -204,8 +211,39 @@ def file_load(path, docs_all):
     file_name = os.path.basename(path)
 
     # 想定していたファイル形式の場合のみ読み込む
+    from langchain_community.document_loaders import TextLoader #←追記
     if file_extension in ct.SUPPORTED_EXTENSIONS:
-        # ファイルの拡張子に合ったdata loaderを使ってデータ読み込み
-        loader = ct.SUPPORTED_EXTENSIONS[file_extension](path)
+        # TextLoaderの場合、エンコーディングを指定                 #←追記
+        if file_extension == '.txt':                            #←追記
+            loader = TextLoader(path, encoding='utf-8')         #←追記
+        elif file_extension == '.csv':                          #←追記
+            loader = CSVLoader(path, encoding='utf-8')          #←追記
+        else:
+            # ファイルの拡張子に合ったdata loaderを使ってデータ読み込み
+            loader = ct.SUPPORTED_EXTENSIONS[file_extension](path)
         docs = loader.load()
-        docs_all.extend(docs)
+        # 整形対象のCSVファイルでない場合、通常のデータソースの入れ物「docs_all」にファイルデータを追加
+        if not file_name in ct.CSV_INTEGRATION_TARGETS:
+            docs_all.extend(docs)
+        # 整形対象のCSVファイルの場合の処理
+        else:
+            # ドキュメントに書き込み用のテキストの入れ物を用意
+            doc = ""
+            # リスト「docs」の各要素にはCSVファイルの各行データが入っているため、行データごとに処理
+            for row in docs:
+                # 行データの中身のテキストを取得
+                page_content = row.page_content
+                # 列ごとに改行が入っているため、改行区切りでリスト化
+                value_list = page_content.split("\n")
+                # リストの各要素を改行で連結したテキストを取得
+                row_data = "\n".join(value_list)
+                # 各行データをまとめる入れ物「doc」に、行データを区切り線込みで順次追加
+                doc += row_data + "\n=================================\n"
+            # ドキュメントのオブジェクトを用意
+            new_doc = Document()
+            # ドキュメントのコンテンツとしてCSVファイルの全データを設定
+            new_doc.page_content = doc
+            # 参照元ファイルのパスを設定
+            new_doc.metadata = {"source": path}
+            # CSVファイル整形後のデータソースを格納する用のリストに追加
+            integrated_docs_all.append(new_doc)

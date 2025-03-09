@@ -60,22 +60,8 @@ print("初期化完了")
 cn.display_app_title()
 print("タイトル表示完了")
 
-# サイドバーにラジオボタンと説明を表示
-with st.sidebar:
-    st.radio(
-        "利用目的を選択してください",
-        options=[ct.ANSWER_MODE_1, ct.ANSWER_MODE_2],
-        index=0,
-        key="mode"
-    )
-    st.markdown("### 【「社内文書検索」をした場合】")
-    st.markdown("入力と関連性が高い社内文書のありかを検索できます。")
-    st.markdown("### 【入力例】")
-    st.markdown("- 社員の育成方針に関するMTGの議事録")
-    st.markdown("### 【「社内問い合わせ」を選択した場合】")
-    st.markdown("質問・要望に対して、社内文書の情報を元に回答を得られます。")
-    st.markdown("### 【入力例】")
-    st.markdown("- 人事部に所属している従業員の情報を一覧化して")
+cn.display_select_mode()
+print("サイドバー表示完了")
 
 # AIメッセージの初期表示
 cn.display_initial_ai_message()

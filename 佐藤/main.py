@@ -51,20 +51,20 @@ except Exception as e:
 if not "initialized" in st.session_state:
     st.session_state.initialized = True
     logger.info(ct.APP_BOOT_MESSAGE)
-print("初期化完了")
+
 
 ############################################################
 # 4. 初期表示
 ############################################################
 # タイトル表示
 cn.display_app_title()
-print("タイトル表示完了")
+
 # モード表示
 cn.display_select_mode()
-print("サイドバー表示完了")
+
 # AIメッセージの初期表示
 cn.display_initial_ai_message()
-print("初期表示完了")
+
 
 ############################################################
 # 5. 会話ログの表示
@@ -72,7 +72,6 @@ print("初期表示完了")
 try:
     # 会話ログの表示
     cn.display_conversation_log()
-    print("会話ログ表示完了")
 except Exception as e:
     # エラーログの出力
     logger.error(f"{ct.CONVERSATION_LOG_ERROR_MESSAGE}\n{e}")
@@ -86,24 +85,22 @@ except Exception as e:
 # 6. チャット入力の受け付け
 ############################################################
 chat_message = st.chat_input(ct.CHAT_INPUT_HELPER_TEXT)
-print("メッセージ受付完了")
+
 
 ############################################################
 # 7. チャット送信時の処理
 ############################################################
-
 if chat_message:
     # ==========================================
     # 7-1. ユーザーメッセージの表示
     # ==========================================
     # ユーザーメッセージのログ出力
-
     logger.info({"message": chat_message, "application_mode": st.session_state.mode})
-    print("logger.info完了")
+
     # ユーザーメッセージを表示
     with st.chat_message("user"):
         st.markdown(chat_message)
-    print("st.chat_message完了")
+
     # ==========================================
     # 7-2. LLMからの回答取得
     # ==========================================
@@ -113,9 +110,7 @@ if chat_message:
     with st.spinner(ct.SPINNER_TEXT):
         try:
             # 画面読み込み時に作成したRetrieverを使い、Chainを実行
-            print("chain実行")
             llm_response = utils.get_llm_response(chat_message)
-            print("chain終了")
         except Exception as e:
             # エラーログの出力
             logger.error(f"{ct.GET_LLM_RESPONSE_ERROR_MESSAGE}\n{e}")

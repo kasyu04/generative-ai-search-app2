@@ -20,6 +20,7 @@ def display_app_title():
     """
     st.markdown(f"## {ct.APP_NAME}")
 
+
 def display_select_mode():
     """
     回答モードのラジオボタンを表示

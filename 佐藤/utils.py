@@ -71,7 +71,7 @@ def get_llm_response(chat_message):
     """
     # LLMのオブジェクトを用意
     llm = ChatOpenAI(model_name=ct.MODEL, temperature=ct.TEMPERATURE)
-    st.write("ChatOpenAIオブジェクト用意完了")
+
     # 会話履歴なしでもLLMに理解してもらえる、独立した入力テキストを取得するためのプロンプトテンプレートを作成
     question_generator_template = ct.SYSTEM_PROMPT_CREATE_INDEPENDENT_TEXT
     question_generator_prompt = ChatPromptTemplate.from_messages(
@@ -99,33 +99,21 @@ def get_llm_response(chat_message):
     )
 
     # 会話履歴なしでもLLMに理解してもらえる、独立した入力テキストを取得するためのRetrieverを作成
-    st.write("retriever作成")
     history_aware_retriever = create_history_aware_retriever(
         llm, st.session_state.retriever, question_generator_prompt
     )
-    st.write("retriever作成完了")
+
+    # 関連ドキュメントの数を定数から取得
+    related_docs = retriever.get_relevant_documents(chat_message, num_docs=ct.NUM_RELATED_DOCS)
+
     # LLMから回答を取得する用のChainを作成
-    st.write("chain作成")
     question_answer_chain = create_stuff_documents_chain(llm, question_answer_prompt)
     # 「RAG x 会話履歴の記憶機能」を実現するためのChainを作成
     chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-    st.write("chain作成完了")
+
     # LLMへのリクエストとレスポンス取得
-    st.write("chat_message取得",chat_message)
-    print("chat_message = ",chat_message, "\n")
-    st.write(st.session_state.chat_history)
-    print("st.session_state.chat_history = ", st.session_state.chat_history, "\n")
-    st.write("chain.invoke実行")
-    st.session_state.chat_history = [message for message in st.session_state.chat_history if message != '""']
-    if st.session_state.chat_history != []:
-        st.session_state.chat_history = []
-    print("st.session_state.chat_history = ", st.session_state.chat_history, "\n")
     llm_response = chain.invoke({"input": chat_message, "chat_history": st.session_state.chat_history})
-    st.write(chat_message)
-    st.write(st.session_state.chat_history)
-    st.write("chain.invoke完了")
     # LLMレスポンスを会話履歴に追加
-    st.write("chain.invoke後のchat_history追加")
     st.session_state.chat_history.extend([HumanMessage(content=chat_message), llm_response["answer"]])
-    st.write("ChatOpenAIオブジェクト用意完了")
+
     return llm_response

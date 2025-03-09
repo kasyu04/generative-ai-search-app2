@@ -41,9 +41,6 @@ APP_BOOT_MESSAGE = "アプリが起動されました。"
 # ==========================================
 MODEL = "gpt-4o-mini"
 TEMPERATURE = 0.5
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
-TOP_K = 5
 
 
 # ==========================================
@@ -55,9 +52,6 @@ SUPPORTED_EXTENSIONS = {
     ".docx": Docx2txtLoader,
     ".csv": CSVLoader
 }
-CSV_INTEGRATION_TARGETS = [
-    "社員名簿.csv"
-]
 WEB_URL_LOAD_TARGETS = [
     "https://generative-ai.web-camp.io/"
 ]
@@ -116,3 +110,10 @@ NO_DOC_MATCH_MESSAGE = """
 CONVERSATION_LOG_ERROR_MESSAGE = "過去の会話履歴の表示に失敗しました。"
 GET_LLM_RESPONSE_ERROR_MESSAGE = "回答生成に失敗しました。"
 DISP_ANSWER_ERROR_MESSAGE = "回答表示に失敗しました。"
+
+# 関連ドキュメントの数
+NUM_RELATED_DOCS = 5
+
+# チャンクサイズとチャンクオーバーラップ
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200

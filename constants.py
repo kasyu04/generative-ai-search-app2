@@ -41,9 +41,12 @@ APP_BOOT_MESSAGE = "アプリが起動されました。"
 # ==========================================
 MODEL = "gpt-4o-mini"
 TEMPERATURE = 0.5
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
 TOP_K = 5
+
+# 関連ドキュメントの数
+NUM_RELATED_DOCUMENTS = 5
 
 
 # ==========================================

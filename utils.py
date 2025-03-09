@@ -14,6 +14,13 @@ from langchain_openai import ChatOpenAI
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 import constants as ct
+from langchain_community.document_loaders.csv_loader import CSVLoader
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
+from langchain_community.retrievers import BM25Retriever
+from langchain.retrievers import EnsembleRetriever
+from langchain.chains import RetrievalQA
+from langchain.llms import OpenAI
 
 
 ############################################################
@@ -61,71 +68,45 @@ def build_error_message(message):
 
 def get_llm_response(chat_message):
     """
-    LLMからの回答取得
-
+    LLMからの回答を取得する関数
     Args:
-        chat_message: ユーザー入力値
-
+        chat_message: ユーザーからのメッセージ
     Returns:
-        LLMからの回答
+        llm_response: LLMからの回答
     """
-    # LLMのオブジェクトを用意
-    llm = ChatOpenAI(model_name=ct.MODEL, temperature=ct.TEMPERATURE)
-    st.write("ChatOpenAIオブジェクト用意完了")
-    # 会話履歴なしでもLLMに理解してもらえる、独立した入力テキストを取得するためのプロンプトテンプレートを作成
-    question_generator_template = ct.SYSTEM_PROMPT_CREATE_INDEPENDENT_TEXT
-    question_generator_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", question_generator_template),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}")
-        ]
+    # ベクターストアの設定
+    loader = CSVLoader(file_path="data/documents.csv", encoding='utf-8')
+    docs = loader.load()
+
+    docs_contents = []
+    for doc in docs:
+        docs_contents.append(doc.page_content)
+
+    embeddings = OpenAIEmbeddings()
+    db = Chroma.from_documents(docs, embedding=embeddings)
+
+    retriever = db.as_retriever(search_kwargs={"k": ct.NUM_RELATED_DOCUMENTS})  # 定数を使用
+    bm25_retriever = BM25Retriever.from_texts(
+        docs_contents,
+        preprocess_func=preprocess_func,
+        k=ct.NUM_RELATED_DOCUMENTS  # 定数を使用
+    )
+    ensemble_retriever = EnsembleRetriever(
+        retrievers=[bm25_retriever, retriever],
+        weights=[0.5, 0.5]
     )
 
-    # モードによってLLMから回答を取得する用のプロンプトを変更
-    if st.session_state.mode == ct.ANSWER_MODE_1:
-        # モードが「社内文書検索」の場合のプロンプト
-        question_answer_template = ct.SYSTEM_PROMPT_DOC_SEARCH
-    else:
-        # モードが「社内問い合わせ」の場合のプロンプト
-        question_answer_template = ct.SYSTEM_PROMPT_INQUIRY
-    # LLMから回答を取得する用のプロンプトテンプレートを作成
-    question_answer_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", question_answer_template),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}")
-        ]
+    # RetrievalQAの設定
+    llm = OpenAI(model_name="gpt-4", temperature=0.5)
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
+        retriever=ensemble_retriever,
+        return_source_documents=True
     )
 
-    # 会話履歴なしでもLLMに理解してもらえる、独立した入力テキストを取得するためのRetrieverを作成
-    st.write("retriever作成")
-    history_aware_retriever = create_history_aware_retriever(
-        llm, st.session_state.retriever, question_generator_prompt
-    )
-    st.write("retriever作成完了")
-    # LLMから回答を取得する用のChainを作成
-    st.write("chain作成")
-    question_answer_chain = create_stuff_documents_chain(llm, question_answer_prompt)
-    # 「RAG x 会話履歴の記憶機能」を実現するためのChainを作成
-    chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-    st.write("chain作成完了")
-    # LLMへのリクエストとレスポンス取得
-    st.write("chat_message取得",chat_message)
-    print("chat_message = ",chat_message, "\n")
-    st.write(st.session_state.chat_history)
-    print("st.session_state.chat_history = ", st.session_state.chat_history, "\n")
-    st.write("chain.invoke実行")
-    st.session_state.chat_history = [message for message in st.session_state.chat_history if message != '""']
-    if st.session_state.chat_history != []:
-        st.session_state.chat_history = []
-    print("st.session_state.chat_history = ", st.session_state.chat_history, "\n")
-    llm_response = chain.invoke({"input": chat_message, "chat_history": st.session_state.chat_history})
-    st.write(chat_message)
-    st.write(st.session_state.chat_history)
-    st.write("chain.invoke完了")
-    # LLMレスポンスを会話履歴に追加
-    st.write("chain.invoke後のchat_history追加")
-    st.session_state.chat_history.extend([HumanMessage(content=chat_message), llm_response["answer"]])
-    st.write("ChatOpenAIオブジェクト用意完了")
+    # ユーザーメッセージに対する回答を取得
+    result = qa_chain({"query": chat_message})
+    llm_response = result["result"]
+
     return llm_response
